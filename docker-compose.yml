@@ -1,0 +1,22 @@
+
+services:
+  postgres:
+    image: mangeot/postgres4jibiki
+    environment:
+      - POSTGRES_USER=postgres
+      - DATABASE_HOST=postgres
+      - DATABASE_NAME=${DATABASE_NAME}
+      - DATABASE_USER=${DATABASE_USER}
+      - DATABASE_PASSWORD=${DATABASE_PASSWORD}
+    volumes:
+      - postgresql:/var/lib/postgresql/data
+    ports:
+      - 5432:5432
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER}"]
+      interval: 1s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgresql:
