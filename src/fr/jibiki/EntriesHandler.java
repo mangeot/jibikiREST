@@ -5,9 +5,19 @@ import java.io.OutputStream;
 import java.io.UnsupportedEncodingException;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
+
 import com.sun.net.httpserver.HttpExchange;
 
 public class EntriesHandler implements com.sun.net.httpserver.HttpHandler {
+
+	protected static String STRATEGY_PARAMETER = "strategy";
+	protected static String LIMIT_PARAMETER = "count";
+    protected static String OFFSET_PARAMETER = "startIndex";
+    protected static String ORDERBY_PARAMETER = "sortBy";
+
+
     @Override
     public void handle(HttpExchange t) throws IOException {
         String method = t.getRequestMethod();
@@ -44,9 +54,30 @@ public class EntriesHandler implements com.sun.net.httpserver.HttpHandler {
                 String contribId=restStrings[2];
                 response = Database.getEntryId(dictName,srclang,contribId);
             }
+            else if (restStrings.length>3) {
+                String srclang=restStrings[1];
+                String mode=restStrings[2];
+                String string=restStrings[3];
+                HashMap paramsMap = RestHttpServer.parseQueryString(params); 
+System.out.println("Value of parameter  " + STRATEGY_PARAMETER + ": " +paramsMap.get(STRATEGY_PARAMETER));
+
+				String strategy = (String) paramsMap.get(STRATEGY_PARAMETER);
+				String limit =  (String) paramsMap.get(LIMIT_PARAMETER);
+                String offset =  (String) paramsMap.get(OFFSET_PARAMETER);
+                String orderby =  (String) paramsMap.get(ORDERBY_PARAMETER);
+				String key=null;
+				if (restStrings.length==5) {
+					key = restStrings[4];
+				}
+                response = Database.getEntries(dictName,srclang,mode, string, key, strategy, limit, offset, orderby);
+
+            }
+            else {
+                // erreur
+            }
         }
         t.getResponseHeaders().set("Content-Type","text/xml; charset=UTF-8");
-        //t.getResponseHeaders().put("Accept-Encoding", Arrays.asList("UTF-8"));
+        t.getResponseHeaders().put("Accept-Encoding", Arrays.asList("UTF-8"));
         OutputStream os = t.getResponseBody();
         byte[] bytes = response.getBytes(StandardCharsets.UTF_8);
         t.sendResponseHeaders(200, bytes.length);
