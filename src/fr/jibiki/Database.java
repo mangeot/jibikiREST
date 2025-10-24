@@ -16,6 +16,8 @@ public class Database {
             + "xmlns:d='http://www-clips.imag.fr/geta/services/dml'>";
     protected static final String DICTLIST_XMLSTRING_END = "</d:dictionary-metadata-list>";
     protected static final String DICTIONARY_FILES_TAG = "dictionary-metadata-files";
+    protected static final String ENTRIES_HEAD_XMLSTRING = "<?xml version='1.0' encoding='UTF-8'?><d:entry-list xmlns:d='http://www-clips.imag.fr/geta/services/dml'>";
+	protected static final String ENTRIES_TAIL_XMLSTRING = "\n</d:entry-list>";
     protected static HashMap VolumesDbNames = null;
     protected static HashMap selectEntryIdHashMap = new HashMap();
     protected static HashMap selectEntriesHashMap = new HashMap();
@@ -175,7 +177,7 @@ public class Database {
                     selectEntryIdHashMap.put(volumekey, statement);
                     selectQuery = "select xmlcode from " + volumedbname
                             + " where objectid in (select entryid from idx" + volumedbname + " where key= ? "
-                            + " and value= ? order by msort limit ? offset ?));";
+                            + " and value = any (?) order by msort limit NULLIF(?, -1) offset ?);";
                     statement = myConnection.prepareStatement(selectQuery);
  
                     selectEntriesHashMap.put(volumekey, statement);
@@ -249,35 +251,37 @@ public class Database {
 
     public static String getEntries(String dict, String srclang, String mode, String word, String key, String strategy,
         String limit, String offset, String orderby) {
-        String result = "";
+        String result = ENTRIES_HEAD_XMLSTRING;
         try {
             if (myConnection != null) {
                 // SQL query to retrieve data from the 'book' table
-                 PreparedStatement statement = (PreparedStatement) selectEntryIdHashMap.get(dict + "|" + srclang);
+                 PreparedStatement statement = (PreparedStatement) selectEntriesHashMap.get(dict + "|" + srclang);
                 if (statement != null) {
+ 					String entryString = "\n<d:entry d:lang='" + srclang + "' d:dictionary='"
+							+ dict + "'>";
+                    String[] Words = word.split("\\|");
+
+                    java.sql.Array sqlArray = myConnection.createArrayOf("VARCHAR", Words);
                     statement.setString(1, mode);
-                    statement.setString(2, word);
+                    statement.setArray(2, sqlArray);
                     if (limit == null || limit.equals("")) {
-                        statement.setString(3, "ALL");
+                        limit = "-1";
                     }
-                    else {
-                        statement.setInt(3, Integer.parseInt(limit));
-                    }
+                    statement.setInt(3, Integer.parseInt(limit));
                     int offsetInt = 0;
                     if (offset != null && !offset.equals("")) {
                         offsetInt = Integer.parseInt(offset);
                     }
                     statement.setInt(4, offsetInt);
-
+                    System.out.println("debug:");
+                    System.out.println(statement);
                     // execute the query and get the result set
                     ResultSet resultSet = statement.executeQuery();
 
                     // iterate through the result set and print the data
-                    if (resultSet.next()) {
-                        result = resultSet.getString("xmlcode");
+                    while (resultSet.next()) {
+                        result += entryString+resultSet.getString("xmlcode")+"</d:entry>";
                         System.out.println("Entry found: " + dict + " src: " + srclang);
-                    } else {
-                        System.out.println("No result...");
                     }
                 } else {
                     System.out.println("No entry...");
@@ -289,7 +293,7 @@ public class Database {
             // handle any exceptions that occur
             System.out.println("Exception is " + e.getMessage());
         }
-        return result;
+        return result+ENTRIES_TAIL_XMLSTRING;
     }
 
     public static String trimXmlDeclaration(String XmlString) {

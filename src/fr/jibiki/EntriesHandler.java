@@ -6,7 +6,6 @@ import java.io.UnsupportedEncodingException;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.Map;
 
 import com.sun.net.httpserver.HttpExchange;
 
@@ -55,17 +54,24 @@ public class EntriesHandler implements com.sun.net.httpserver.HttpHandler {
                 response = Database.getEntryId(dictName,srclang,contribId);
             }
             else if (restStrings.length>3) {
+                System.out.println("taille reststring: " + restStrings.length);
                 String srclang=restStrings[1];
                 String mode=restStrings[2];
                 String string=restStrings[3];
-                HashMap paramsMap = RestHttpServer.parseQueryString(params); 
-System.out.println("Value of parameter  " + STRATEGY_PARAMETER + ": " +paramsMap.get(STRATEGY_PARAMETER));
-
-				String strategy = (String) paramsMap.get(STRATEGY_PARAMETER);
-				String limit =  (String) paramsMap.get(LIMIT_PARAMETER);
-                String offset =  (String) paramsMap.get(OFFSET_PARAMETER);
-                String orderby =  (String) paramsMap.get(ORDERBY_PARAMETER);
+			    String strategy = null;
+				String limit =  null;
+                String offset =  null;
+                String orderby =  null;
 				String key=null;
+                HashMap paramsMap = RestHttpServer.parseQueryString(params); 
+
+	            if (paramsMap!=null) {
+                    System.out.println("paramsMap: " + paramsMap.size());
+			        strategy = (String) paramsMap.get(STRATEGY_PARAMETER);
+				    limit =  (String) paramsMap.get(LIMIT_PARAMETER);
+                    offset =  (String) paramsMap.get(OFFSET_PARAMETER);
+                    orderby =  (String) paramsMap.get(ORDERBY_PARAMETER);
+                }
 				if (restStrings.length==5) {
 					key = restStrings[4];
 				}
