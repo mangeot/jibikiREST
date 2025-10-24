@@ -16,7 +16,6 @@ public class EntriesHandler implements com.sun.net.httpserver.HttpHandler {
     protected static String OFFSET_PARAMETER = "startIndex";
     protected static String ORDERBY_PARAMETER = "sortBy";
 
-
     @Override
     public void handle(HttpExchange t) throws IOException {
         String method = t.getRequestMethod();
@@ -76,10 +75,10 @@ public class EntriesHandler implements com.sun.net.httpserver.HttpHandler {
 					key = restStrings[4];
 				}
                 response = Database.getEntries(dictName,srclang,mode, string, key, strategy, limit, offset, orderby);
-
             }
             else {
                 // erreur
+                System.out.println("Erreur ici !");
             }
         }
         t.getResponseHeaders().set("Content-Type","text/xml; charset=UTF-8");
