@@ -6,6 +6,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.sql.PreparedStatement;
 
 public class Database {
@@ -16,6 +17,8 @@ public class Database {
     protected static final String DICTLIST_XMLSTRING_END = "</d:dictionary-metadata-list>";
     protected static final String DICTIONARY_FILES_TAG = "dictionary-metadata-files";
     protected static HashMap VolumesDbNames = null;
+    protected static HashMap selectEntryIdHashMap = new HashMap();
+    protected static HashMap selectEntriesHashMap = new HashMap();
 
     protected static PreparedStatement selectUsersStatement = null;
     protected static PreparedStatement selectDictionariesStatement = null;
@@ -40,6 +43,7 @@ public class Database {
                         .prepareStatement("SELECT xmlcode FROM volumes WHERE dictname= ? and sourcelanguage= ?");
 
                 VolumesDbNames = getVolumesTable();
+                initializeSelectTables();
                 return ("Connected to database ");
             } else {
                 return ("Not connected to database");
@@ -128,7 +132,7 @@ public class Database {
         return result;
     }
 
-    public static HashMap getVolumesTable() {
+    protected static HashMap getVolumesTable() {
         HashMap result = new HashMap();
         try {
             if (myConnection != null) {
@@ -154,21 +158,46 @@ public class Database {
         return result;
     }
 
-    public static String getVolumeTableName(String dict, String lang) {
+    protected static String getVolumeTableName(String dict, String lang) {
         return (String) VolumesDbNames.get(dict + "|" + lang);
+    }
+
+    protected static boolean initializeSelectTables() {
+        for (Iterator keys = VolumesDbNames.keySet().iterator(); keys.hasNext();) {
+            String volumekey = (String) keys.next();
+            String volumedbname = (String) VolumesDbNames.get(volumekey);
+            try {
+                if (myConnection != null) {
+                    String selectQuery = "select xmlcode from " + volumedbname
+                            + " where objectid in (select entryid from idx" + volumedbname
+                            + " where key='cdm-contribution-id' and value= ? );";
+                    PreparedStatement statement = myConnection.prepareStatement(selectQuery);
+                    selectEntryIdHashMap.put(volumekey, statement);
+                    selectQuery = "select xmlcode from " + volumedbname
+                            + " where objectid in (select entryid from idx" + volumedbname + " where key= ? "
+                            + " and value= ? order by msort limit ? offset ?));";
+                    statement = myConnection.prepareStatement(selectQuery);
+ 
+                    selectEntriesHashMap.put(volumekey, statement);
+
+                } else {
+                    System.out.println("Not Connected...");
+                }
+            } catch (Exception e) {
+                // handle any exceptions that occur
+                System.out.println("Exception is " + e.getMessage());
+            }
+        }
+        return true;
     }
 
     public static String getEntryId(String dict, String srclang, String entryId) {
         String result = "";
         try {
             if (myConnection != null) {
-                // SQL query to retrieve data from the 'book' table
-                String volumedb = getVolumeTableName(dict, srclang);
-                if (volumedb != null) {
-                    String selectQuery = "select xmlcode from " + volumedb
-                            + " where objectid in (select entryid from idx" + volumedb
-                            + " where key='cdm-contribution-id' and value='" + entryId + "');";
-                    PreparedStatement statement = myConnection.prepareStatement(selectQuery);
+                PreparedStatement statement = (PreparedStatement) selectEntryIdHashMap.get(dict + "|" + srclang);
+                if (statement != null) {
+                    statement.setString(1, entryId);
 
                     // execute the query and get the result set
                     ResultSet resultSet = statement.executeQuery();
@@ -219,18 +248,26 @@ public class Database {
     }
 
     public static String getEntries(String dict, String srclang, String mode, String word, String key, String strategy,
-            String limit, String offset, String orderby) {
+        String limit, String offset, String orderby) {
         String result = "";
         try {
             if (myConnection != null) {
                 // SQL query to retrieve data from the 'book' table
-                String volumedb = getVolumeTableName(dict, srclang);
-                if (volumedb != null) {
-                    String selectQuery = "select xmlcode from " + volumedb
-                            + " where objectid in (select entryid from idx" + volumedb + " where key='" + mode
-                            + "' and value= '" + word + "');";
-                    System.out.println(selectQuery);
-                    PreparedStatement statement = myConnection.prepareStatement(selectQuery);
+                 PreparedStatement statement = (PreparedStatement) selectEntryIdHashMap.get(dict + "|" + srclang);
+                if (statement != null) {
+                    statement.setString(1, mode);
+                    statement.setString(2, word);
+                    if (limit == null || limit.equals("")) {
+                        statement.setString(3, "ALL");
+                    }
+                    else {
+                        statement.setInt(3, Integer.parseInt(limit));
+                    }
+                    int offsetInt = 0;
+                    if (offset != null && !offset.equals("")) {
+                        offsetInt = Integer.parseInt(offset);
+                    }
+                    statement.setInt(4, offsetInt);
 
                     // execute the query and get the result set
                     ResultSet resultSet = statement.executeQuery();
