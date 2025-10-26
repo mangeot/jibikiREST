@@ -60,4 +60,37 @@ public class RestHttpServer {
         return resultMap;
     }
 
+     public static String encodeXMLEntities(String theString) {
+        if (null != theString && !theString.equals("")) {
+            String tmpString = "";
+            while (null != theString && theString.indexOf("&") >= 0) {
+                tmpString = theString.substring(0,theString.indexOf("&"))
+                        + "&amp;";
+                theString = theString.substring(theString.indexOf("&") + 1);
+            }
+            theString = tmpString + theString;
+
+            while (theString.indexOf("'") >= 0 || theString.indexOf("\"") >= 0 
+                || theString.indexOf("<") >= 0 ||theString.indexOf(">") >= 0) {
+                if (theString.indexOf("'") >= 0) {
+                    theString = theString.substring(0,theString.indexOf("'"))
+                        + "&#39;" + theString.substring(theString.indexOf("'") + 1);
+                }
+                if (theString.indexOf("\"") >= 0) {
+                    theString = theString.substring(0,theString.indexOf("\""))
+                        + "&quot;" + theString.substring(theString.indexOf("\"") + 1);
+                }
+                if (theString.indexOf("<") >= 0) {
+                    theString = theString.substring(0,theString.indexOf("<"))
+                        + "&lt;" + theString.substring(theString.indexOf("<") + 1);
+                }
+                if (theString.indexOf(">") >= 0) {
+                    theString = theString.substring(0,theString.indexOf(">"))
+                        + "&gt;" + theString.substring(theString.indexOf(">") + 1);
+                } 
+            }
+        }
+    return theString;
+    }    
+
 }

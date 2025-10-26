@@ -17,10 +17,14 @@ public class Database {
     protected static final String DICTLIST_XMLSTRING_END = "</d:dictionary-metadata-list>";
     protected static final String DICTIONARY_FILES_TAG = "dictionary-metadata-files";
     protected static final String ENTRIES_HEAD_XMLSTRING = "<?xml version='1.0' encoding='UTF-8'?><d:entry-list xmlns:d='http://www-clips.imag.fr/geta/services/dml'>";
-	protected static final String ENTRIES_TAIL_XMLSTRING = "\n</d:entry-list>";
+    protected static final String ENTRIES_TAIL_XMLSTRING = "\n</d:entry-list>";
     protected static HashMap VolumesDbNames = null;
     protected static HashMap selectEntryIdHashMap = new HashMap();
+    protected static HashMap selectHandleHashMap = new HashMap();
     protected static HashMap selectEntriesHashMap = new HashMap();
+    protected static HashMap selectIndexesHashMap = new HashMap();
+    protected static HashMap selectNextEntriesHashMap = new HashMap();
+    protected static HashMap selectPreviousEntriesHashMap = new HashMap();
 
     protected static PreparedStatement selectUsersStatement = null;
     protected static PreparedStatement selectDictionariesStatement = null;
@@ -83,30 +87,47 @@ public class Database {
     }
 
     protected static boolean initializeSelectTables() {
-        for (Iterator keys = VolumesDbNames.keySet().iterator(); keys.hasNext();) {
-            String volumekey = (String) keys.next();
-            String volumedbname = (String) VolumesDbNames.get(volumekey);
-            try {
-                if (myConnection != null) {
+        if (myConnection != null) {
+            for (Iterator keys = VolumesDbNames.keySet().iterator(); keys.hasNext();) {
+                String volumekey = (String) keys.next();
+                String[] dictlang = volumekey.split("\\|");
+                String srclang = dictlang[1];
+                String volumedbname = (String) VolumesDbNames.get(volumekey);
+                try {
                     String selectQuery = "select xmlcode from " + volumedbname
                             + " where objectid in (select entryid from idx" + volumedbname
                             + " where key='cdm-contribution-id' and value= ? );";
                     PreparedStatement statement = myConnection.prepareStatement(selectQuery);
                     selectEntryIdHashMap.put(volumekey, statement);
+                    selectQuery = "select xmlcode from " + volumedbname + " where objectid = ?;";
+                    statement = myConnection.prepareStatement(selectQuery);
+                    selectHandleHashMap.put(volumekey, statement);
                     selectQuery = "select xmlcode from " + volumedbname
                             + " where objectid in (select entryid from idx" + volumedbname + " where key= ? "
-                            + " and value = any (?) order by msort limit NULLIF(?, -1) offset ?) order by headword;";
+                            + " and value = any (?) limit NULLIF(?, -1) offset ?) order by multilingual_sort('"
+                            + srclang + "',headword);";
                     statement = myConnection.prepareStatement(selectQuery);
- 
                     selectEntriesHashMap.put(volumekey, statement);
+                    selectQuery = "select value, entryid from idx" + volumedbname + " where key= ? "
+                            + " and value = any (?) order by msort limit NULLIF(?, -1) offset ?;";
+                    statement = myConnection.prepareStatement(selectQuery);
+                    selectIndexesHashMap.put(volumekey, statement);
+                    selectQuery = "select value, entryid from idx" + volumedbname
+                            + " where key='cdm-headword' and msort < multilingual_sort('" + srclang + "',?) order by msort desc limit 1;";
+                    statement = myConnection.prepareStatement(selectQuery);
+                    selectPreviousEntriesHashMap.put(volumekey, statement);
+                    selectQuery = "select value, entryid from idx" + volumedbname
+                            + " where key='cdm-headword' and msort > multilingual_sort('" + srclang + "',?) order by msort limit 1;";
+                    statement = myConnection.prepareStatement(selectQuery);
+                    selectNextEntriesHashMap.put(volumekey, statement);
 
-                } else {
-                    System.out.println("Not Connected...");
+                } catch (Exception e) {
+                    // handle any exceptions that occur
+                    System.out.println("Exception is " + e.getMessage());
                 }
-            } catch (Exception e) {
-                // handle any exceptions that occur
-                System.out.println("Exception is " + e.getMessage());
             }
+        } else {
+            System.out.println("Not Connected...");
         }
         return true;
     }
@@ -220,6 +241,37 @@ public class Database {
         return result;
     }
 
+    public static String getEntryByHandle(String dict, String srclang, int handle) {
+        String result = "";
+        try {
+            if (myConnection != null) {
+                PreparedStatement statement = (PreparedStatement) selectHandleHashMap.get(dict + "|" + srclang);
+                if (statement != null) {
+                    statement.setInt(1, handle);
+
+                    // execute the query and get the result set
+                    ResultSet resultSet = statement.executeQuery();
+
+                    // iterate through the result set and print the data
+                    if (resultSet.next()) {
+                        result = resultSet.getString("xmlcode");
+                        System.out.println("Entry found: " + dict + " src: " + srclang + " handle: " + handle);
+                    } else {
+                        System.out.println("No result...");
+                    }
+                } else {
+                    System.out.println("No volume...");
+                }
+            } else {
+                System.out.println("Not Connected...");
+            }
+        } catch (Exception e) {
+            // handle any exceptions that occur
+            System.out.println("Exception is " + e.getMessage());
+        }
+        return result;
+    }
+
     public static String getVolume(String dict, String srclang) {
         String result = "";
         try {
@@ -246,41 +298,77 @@ public class Database {
     }
 
     public static String getEntries(String dict, String srclang, String mode, String word, String key, String strategy,
-        String limit, String offset, String orderby) {
+            String limit, String offset, String orderby) {
         String result = ENTRIES_HEAD_XMLSTRING;
+        String criteriaString = "<d:criteria d:name='" + mode + "' d:strategy='"
+                + strategy + "' value='" + RestHttpServer.encodeXMLEntities(word) + "'>";
+
         try {
             if (myConnection != null) {
-                // SQL query to retrieve data from the 'book' table
-                 PreparedStatement statement = (PreparedStatement) selectEntriesHashMap.get(dict + "|" + srclang);
-                if (statement != null) {
- 					String entryString = "\n<d:entry d:lang='" + srclang + "' d:dictionary='"
-							+ dict + "'>";
-                    String[] Words = word.split("\\|");
-
-                    java.sql.Array sqlArray = myConnection.createArrayOf("VARCHAR", Words);
-                    statement.setString(1, mode);
-                    statement.setArray(2, sqlArray);
-                    if (limit == null || limit.equals("")) {
-                        limit = "-1";
+                PreparedStatement statement = null;
+                if (mode.equals("handle") {
+                    return getEntryByHandle(dict, srclang, word);
+                }
+                else if (mode.equals("previous") || mode.equals("next")) {
+                    if (mode.equals("previous")) {
+                        statement = (PreparedStatement) selectPreviousEntriesHashMap.get(dict + "|" + srclang);
+                    } else {
+                        statement = (PreparedStatement) selectNextEntriesHashMap.get(dict + "|" + srclang);
                     }
-                    statement.setInt(3, Integer.parseInt(limit));
-                    int offsetInt = 0;
-                    if (offset != null && !offset.equals("")) {
-                        offsetInt = Integer.parseInt(offset);
-                    }
-                    statement.setInt(4, offsetInt);
-                    System.out.println("debug:");
-                    System.out.println(statement);
-                    // execute the query and get the result set
+                    statement.setString(1, word);
                     ResultSet resultSet = statement.executeQuery();
-
-                    // iterate through the result set and print the data
-                    while (resultSet.next()) {
-                        result += entryString+resultSet.getString("xmlcode")+"</d:entry>";
-                        System.out.println("Entry found: " + dict + " src: " + srclang);
+                    if (resultSet.next()) {
+                        int entryid = resultSet.getInt("entryid");
+                        System.out.println("entryid found: " + dict + " src: " + srclang + " entryid:" + entryid);
+                        return getEntryByHandle(dict, srclang, entryid);
                     }
-                } else {
-                    System.out.println("No entry...");
+                    else  {
+                        System.out.println("No entry...");
+                    }
+                } 
+                else {
+                    if (key != null && key.equals("entries")) {
+                        statement = (PreparedStatement) selectEntriesHashMap.get(dict + "|" + srclang);
+                    } else {
+                        statement = (PreparedStatement) selectIndexesHashMap.get(dict + "|" + srclang);
+                    }
+                    if (statement != null) {
+                        String entryString = "\n<d:entry d:lang='" + srclang + "' d:dictionary='"
+                                + dict + "'>";
+                        String[] Words = word.split("\\|");
+
+                        java.sql.Array sqlArray = myConnection.createArrayOf("VARCHAR", Words);
+                        statement.setString(1, mode);
+                        statement.setArray(2, sqlArray);
+                        if (limit == null || limit.equals("")) {
+                            limit = "-1";
+                        }
+                        statement.setInt(3, Integer.parseInt(limit));
+                        int offsetInt = 0;
+                        if (offset != null && !offset.equals("")) {
+                            offsetInt = Integer.parseInt(offset);
+                        }
+                        statement.setInt(4, offsetInt);
+                        System.out.println("debug:");
+                        System.out.println(statement);
+                        // execute the query and get the result set
+                        ResultSet resultSet = statement.executeQuery();
+
+                        // iterate through the result set and print the data
+                        while (resultSet.next()) {
+                            result += entryString;
+                            if (key != null && key.equals("entries")) {
+                                result += resultSet.getString("xmlcode") + "</d:entry>";
+                            } else {
+                                result += criteriaString;
+                                result += resultSet.getString("value") + "</d:criteria>";
+                                result += "<d:handle>" + resultSet.getString("entryid") + "</d:handle></d:entry>";
+                            }
+                            System.out.println("Entry found: " + dict + " src: " + srclang);
+                        }
+                    } else {
+                        System.out.println("No entry...");
+                    }
                 }
             } else {
                 System.out.println("Not Connected...");
@@ -289,7 +377,7 @@ public class Database {
             // handle any exceptions that occur
             System.out.println("Exception is " + e.getMessage());
         }
-        return result+ENTRIES_TAIL_XMLSTRING;
+        return result + ENTRIES_TAIL_XMLSTRING;
     }
 
     public static String trimXmlDeclaration(String XmlString) {
