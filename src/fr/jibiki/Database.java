@@ -306,8 +306,8 @@ public class Database {
         try {
             if (myConnection != null) {
                 PreparedStatement statement = null;
-                if (mode.equals("handle") {
-                    return getEntryByHandle(dict, srclang, word);
+                if (mode.equals("handle")) {
+                    return getEntryByHandle(dict, srclang, Integer.parseInt(word));
                 }
                 else if (mode.equals("previous") || mode.equals("next")) {
                     if (mode.equals("previous")) {
