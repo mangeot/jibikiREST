@@ -7,6 +7,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.Vector;
 import java.sql.PreparedStatement;
 
 public class Database {
@@ -20,6 +21,7 @@ public class Database {
     protected static final String ENTRIES_TAIL_XMLSTRING = "\n</d:entry-list>";
     protected static HashMap VolumesDbNames = null;
     protected static HashMap selectEntryIdHashMap = new HashMap();
+    protected static HashMap selectKeyHashMap = new HashMap();
     protected static HashMap selectHandleHashMap = new HashMap();
     protected static HashMap selectEntriesHashMap = new HashMap();
     protected static HashMap selectIndexesHashMap = new HashMap();
@@ -102,6 +104,10 @@ public class Database {
                     selectQuery = "select xmlcode from " + volumedbname + " where objectid = ?;";
                     statement = myConnection.prepareStatement(selectQuery);
                     selectHandleHashMap.put(volumekey, statement);
+                    selectQuery = "select lang, value from idx" + volumedbname + " where key= ? "
+                            + " and entryid= ?;";
+                    statement = myConnection.prepareStatement(selectQuery);
+                    selectKeyHashMap.put(volumekey, statement);
                     selectQuery = "select xmlcode from " + volumedbname
                             + " where objectid in (select entryid from idx" + volumedbname + " where key= ? "
                             + " and value = any (?) limit NULLIF(?, -1) offset ?) order by multilingual_sort('"
@@ -113,11 +119,13 @@ public class Database {
                     statement = myConnection.prepareStatement(selectQuery);
                     selectIndexesHashMap.put(volumekey, statement);
                     selectQuery = "select value, entryid from idx" + volumedbname
-                            + " where key='cdm-headword' and msort < multilingual_sort('" + srclang + "',?) order by msort desc limit 1;";
+                            + " where key='cdm-headword' and msort < multilingual_sort('" + srclang
+                            + "',?) order by msort desc limit 1;";
                     statement = myConnection.prepareStatement(selectQuery);
                     selectPreviousEntriesHashMap.put(volumekey, statement);
                     selectQuery = "select value, entryid from idx" + volumedbname
-                            + " where key='cdm-headword' and msort > multilingual_sort('" + srclang + "',?) order by msort limit 1;";
+                            + " where key='cdm-headword' and msort > multilingual_sort('" + srclang
+                            + "',?) order by msort limit 1;";
                     statement = myConnection.prepareStatement(selectQuery);
                     selectNextEntriesHashMap.put(volumekey, statement);
 
@@ -272,6 +280,45 @@ public class Database {
         return result;
     }
 
+   public static HashMap getKeyByEntryId(String dict, String srclang, int entryid, String key) {
+        HashMap result = new HashMap();
+        try {
+            if (myConnection != null) {
+                PreparedStatement statement = (PreparedStatement) selectKeyHashMap.get(dict + "|" + srclang);
+                if (statement != null) {
+                    statement.setString(1, key);
+                    statement.setInt(2, entryid);
+                    System.out.println("debug:");
+                    System.out.println(statement);
+                        
+                    // execute the query and get the result set
+                    ResultSet resultSet = statement.executeQuery();
+
+                    // iterate through the result set and print the data
+                    while (resultSet.next()) {
+                        String lang = resultSet.getString("lang");
+                        String value = resultSet.getString("value");
+                        Vector langVector = (Vector) result.get(lang);
+                        if (langVector ==null) {
+                            langVector = new Vector();
+                            result.put(lang, langVector);
+                        }
+                        langVector.add(value);
+                        System.out.println("Entry found: " + dict + " src: " + srclang + " entryid: " + entryid + " key:" + key + " lang:" + lang + " value:" + value);
+                    }
+                } else {
+                    System.out.println("No volume...");
+                }
+            } else {
+                System.out.println("Not Connected...");
+            }
+        } catch (Exception e) {
+            // handle any exceptions that occur
+            System.out.println("Exception is " + e.getMessage());
+        }
+        return result;
+    }
+
     public static String getVolume(String dict, String srclang) {
         String result = "";
         try {
@@ -308,8 +355,7 @@ public class Database {
                 PreparedStatement statement = null;
                 if (mode.equals("handle")) {
                     return getEntryByHandle(dict, srclang, Integer.parseInt(word));
-                }
-                else if (mode.equals("previous") || mode.equals("next")) {
+                } else if (mode.equals("previous") || mode.equals("next")) {
                     if (mode.equals("previous")) {
                         statement = (PreparedStatement) selectPreviousEntriesHashMap.get(dict + "|" + srclang);
                     } else {
@@ -321,12 +367,10 @@ public class Database {
                         int entryid = resultSet.getInt("entryid");
                         System.out.println("entryid found: " + dict + " src: " + srclang + " entryid:" + entryid);
                         return getEntryByHandle(dict, srclang, entryid);
-                    }
-                    else  {
+                    } else {
                         System.out.println("No entry...");
                     }
-                } 
-                else {
+                } else {
                     if (key != null && key.equals("entries")) {
                         statement = (PreparedStatement) selectEntriesHashMap.get(dict + "|" + srclang);
                     } else {
@@ -362,7 +406,18 @@ public class Database {
                             } else {
                                 result += criteriaString;
                                 result += resultSet.getString("value") + "</d:criteria>";
-                                result += "<d:handle>" + resultSet.getString("entryid") + "</d:handle></d:entry>";
+                                int entryid = resultSet.getInt("entryid");
+                                if (key != null) {
+                                    HashMap keyValues = getKeyByEntryId(dict, srclang, entryid, key);
+                                    for (Iterator keys = keyValues.keySet().iterator(); keys.hasNext();) {
+                                        String lang = (String) keys.next();
+                                        Vector values = (Vector) keyValues.get(lang);
+                                        for (Integer i = 0; i < values.size(); i++) {
+                                            result += "<d:key value='"+key+"' d:lang='"+lang+"'>"+values.get(i)+"</d:key>";
+                                        }
+                                    }
+                                }
+                                result += "<d:handle>" + entryid + "</d:handle></d:entry>";
                             }
                             System.out.println("Entry found: " + dict + " src: " + srclang);
                         }
