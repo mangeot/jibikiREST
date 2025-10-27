@@ -234,7 +234,7 @@ public class Database {
                         result = resultSet.getString("xmlcode");
                         System.out.println("Volume found: " + dict + " src: " + srclang);
                     } else {
-                        System.out.println("No result...");
+                        System.out.println("No entry id...");
                     }
                 } else {
                     System.out.println("No volume...");
@@ -281,7 +281,7 @@ public class Database {
     }
 
    public static HashMap getKeyByEntryId(String dict, String srclang, int entryid, String key) {
-        HashMap result = new HashMap();
+        HashMap result = null;
         try {
             if (myConnection != null) {
                 PreparedStatement statement = (PreparedStatement) selectKeyHashMap.get(dict + "|" + srclang);
@@ -293,7 +293,9 @@ public class Database {
                         
                     // execute the query and get the result set
                     ResultSet resultSet = statement.executeQuery();
-
+                    if (!resultSet.isBeforeFirst() ) {    
+                        result = new HashMap();
+                    } 
                     // iterate through the result set and print the data
                     while (resultSet.next()) {
                         String lang = resultSet.getString("lang");
