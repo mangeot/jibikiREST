@@ -27,10 +27,32 @@ public class RestHttpServer {
         Properties appProps = new Properties();
         appProps.load(Thread.currentThread().getContextClassLoader()
                 .getResourceAsStream("fr/jibiki/RestHttpServer.properties"));
-        int port = Integer.parseInt(appProps.getProperty("port"));
-        String dburl = appProps.getProperty("dburl");
-        String dbuser = appProps.getProperty("dbuser");
-        String dbpassword = appProps.getProperty("dbpassword");
+        int port = Integer.parseInt(appProps.getProperty("API_PORT"));
+        String portEnv = System.getenv("API_PORT");
+        if (portEnv != null && !portEnv.equals("")) {
+            port = Integer.parseInt(portEnv);
+        }
+        String dbhost = appProps.getProperty("DATABASE_HOST");
+        String dbhostEnv = System.getenv("DATABASE_HOST");
+        if (dbhostEnv != null && !dbhostEnv.equals("")) {
+            dbhost = dbhostEnv;
+        }
+        String dbname = appProps.getProperty("DATABASE_NAME");
+        String dbnameEnv = System.getenv("DATABASE_NAME");
+        if (dbnameEnv != null && !dbnameEnv.equals("")) {
+            dbname = dbnameEnv;
+        }
+        String dburl = "jdbc:postgresql://"+dbhost+"/"+dbname;
+        String dbuser = appProps.getProperty("DATABASE_USER");
+        String dbuserEnv = System.getenv("DATABASE_USER");
+        if (dbuserEnv != null && !dbuserEnv.equals("")) {
+            dbuser = dbuserEnv;
+        }
+        String dbpassword = appProps.getProperty("DATABASE_PASSWORD");
+        String dbpasswordEnv = System.getenv("DATABASE_PASSWORD");
+        if (dbpasswordEnv != null && !dbpasswordEnv.equals("")) {
+            dbpassword = dbpasswordEnv;
+        }
         Database.connect(dburl, dbuser, dbpassword);
         HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
         server.createContext(usersApi, new UsersHandler());
