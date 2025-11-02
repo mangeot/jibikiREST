@@ -2,13 +2,12 @@ package fr.jibiki;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Statement;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Vector;
-import java.sql.PreparedStatement;
 
 public class Database {
 
@@ -18,8 +17,15 @@ public class Database {
     protected static final String DICTLIST_XMLSTRING_END = "</d:dictionary-metadata-list>";
     protected static final String DICTIONARY_FILES_TAG = "dictionary-metadata-files";
     protected static final String ENTRIES_HEAD_XMLSTRING = "<?xml version='1.0' encoding='UTF-8'?><d:entry-list xmlns:d='http://www-clips.imag.fr/geta/services/dml'>";
-    protected static final String ENTRIES_TAIL_XMLSTRING = "\n</d:entry-list>";
+    protected static final String ENTRIES_TAIL_XMLSTRING = "\n</d:entry-list>";    
+    protected static final String USERLIST_XMLSTRING_HEADER = "<?xml version='1.0' encoding='UTF-8'?><user-list "
+    + "xmlns='http://www-clips.imag.fr/geta/services/dml'>";
+    protected static final String USERLIST_XMLSTRING_FOOTER = "\n</user-list>";
+    protected static final String USER_XMLSTRING_HEADER = "<?xml version='1.0' encoding='UTF-8'?><user xmlns='http://www-clips.imag.fr/geta/services/dml'>";
+    protected static final String USER_XMLSTRING_FOOTER = "\n</user>";
+
     protected static HashMap VolumesDbNames = null;
+    protected static HashMap UsersTable = null;
     protected static HashMap selectEntryIdHashMap = new HashMap();
     protected static HashMap selectKeyHashMap = new HashMap();
     protected static HashMap selectHandleHashMap = new HashMap();
@@ -51,6 +57,7 @@ public class Database {
                         .prepareStatement("SELECT xmlcode FROM volumes WHERE dictname= ? and sourcelanguage= ?");
 
                 VolumesDbNames = getVolumesTable();
+                UsersTable = getUsersTable();
                 initializeSelectTables();
                 return ("Connected to database ");
             } else {
@@ -140,23 +147,27 @@ public class Database {
         return true;
     }
 
-    public static String getUsers() {
-        String res = "";
+    public static HashMap getUsersTable() {
+        HashMap<String,User> res = null;
         try {
             if (myConnection != null) {
+                res = new HashMap<String,User>();
 
                 // execute the query and get the result set
                 ResultSet resultSet = selectUsersStatement.executeQuery();
-                System.out.println("The Available Data\n");
-
                 // iterate through the result set and print the data
                 while (resultSet.next()) {
-                    String name = resultSet.getString("name");
-                    String login = resultSet.getString("login");
-
+                    String login = resultSet.getString("login");    
+                    User aUser = new User(resultSet.getString("name"),
+                                            login,
+                                            resultSet.getString("password"),
+                                            resultSet.getString("email"),
+                                            resultSet.getString("lang"),
+                                            resultSet.getString("groups"),
+                                            resultSet.getString("xmlcode"));
                     // print the retrieved data
-                    res = res.concat("<br>" + "name: " + name + ", login: " + login);
-                    System.out.println("name: " + name + ", login: " + login);
+                    System.out.println("User found: name: " + aUser.name + ", login: " + login);
+                    res.put(login,aUser);
                 }
             } else {
                 System.out.println("Not Connected...");
@@ -166,6 +177,32 @@ public class Database {
             System.out.println("Exception is " + e.getMessage());
         }
         return res;
+    }
+
+    public static String getUsers() {
+        String result = USERLIST_XMLSTRING_HEADER;
+        for (Iterator keys = UsersTable.keySet().iterator(); keys.hasNext();) {
+            String login = (String) keys.next();
+            User aUser = (User) UsersTable.get(login);
+            result += "<user><login>" + login + "</login>";
+            result += "<name>" + aUser.name + "</name></user>";
+        } 
+        result += USERLIST_XMLSTRING_FOOTER;   
+        return result;                              
+    }
+
+   public static String getUsersForAdmin() {
+        String result = USERLIST_XMLSTRING_HEADER;
+        for (Iterator keys = UsersTable.keySet().iterator(); keys.hasNext();) {
+            String login = (String) keys.next();
+            User aUser = (User) UsersTable.get(login);
+            result += "<user><login>" + login + "</login>";
+            result += "<name>" + aUser.name + "</name>";
+            result += "<email>" + aUser.email + "</email>";
+            result += "<groups>" + aUser.groups + "</groups></user>";
+        } 
+        result += USERLIST_XMLSTRING_FOOTER;   
+        return result;                              
     }
 
     public static String getDictionaries() {
